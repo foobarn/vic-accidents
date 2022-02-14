@@ -1,0 +1,251 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr)
+library(dplyr)
+library(readr)
+library(stringr)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+
+```
+
+
+```{r}
+df_accidents = read_csv('data/processed/accidents.csv')
+df_nodes = read_csv('data/processed/nodes.csv') 
+df_accidents
+df_nodes
+```
+```{r}
+# quick facts
+df_accidents %>%
+  summarise(
+    accidents=n(),
+    nodes=length(unique(node_id)),
+    injuries=sum(n_injured_t),
+    deaths=sum(no_persons_killed))
+
+
+
+```
+
+
+
+```{r}
+
+# Check out different accident types
+
+dfB = df_accidents %>%
+  group_by(accident_type_desc) %>%
+  summarise(
+    n_accidents=n(), 
+    injuries = sum(n_injured_t),
+    fatalites = sum(no_persons_killed)) %>% 
+  pivot_longer(cols=c(injuries,fatalites),names_to='severity') %>%
+  mutate(rate=value/n_accidents)
+dfB
+
+
+dfB %>%
+  select(accident_type_desc, n_accidents) %>%
+  distinct() %>%
+  ggplot(aes(x=accident_type_desc, y=n_accidents)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("Accidents by accident type")
+
+dfB %>%
+  ggplot(aes(x=accident_type_desc, y=value, fill=severity)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("casualties by accident type")
+
+dfB %>%
+  filter(severity=='fatalites') %>%
+  ggplot(aes(x=accident_type_desc, y=value)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("fatalities by accident type")
+
+dfB %>%
+  filter(severity=='fatalites') %>%
+  ggplot(aes(x=accident_type_desc, y=rate)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("fatality rate accident type")
+  
+```
+
+
+
+```{r}
+# Check road geom
+
+dfB = df_accidents %>%
+  group_by(road_geometry_desc) %>%
+  summarise(
+    n_accidents=n(), 
+    n_deaths = sum(no_persons_killed)) %>%
+  mutate(fatality_rate = n_deaths/n_accidents) %>%
+  arrange(-fatality_rate) 
+
+
+dfB %>%
+  ggplot(aes(x=road_geometry_desc, y=n_accidents)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("Accidents by road_geometry_desc")
+
+dfB %>%
+  ggplot(aes(x=road_geometry_desc, y=n_deaths)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("Fatalities by road_geometry_desc")
+
+dfB %>%
+  ggplot(aes(x=road_geometry_desc, y=fatality_rate)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("fatality to accident ratio by road_geometry_desc")
+
+
+```
+
+
+
+```{r}
+dfD = df_accidents %>%
+  filter(!is.na(object_type_desc)) %>%
+  group_by(object_type_desc) %>%
+  summarise(
+    n_accidents=n(), 
+    n_deaths = sum(no_persons_killed)) %>%
+  mutate(fatality_rate = n_deaths/n_accidents) %>%
+  arrange(-fatality_rate) 
+dfD
+
+dfD %>%
+  ggplot(aes(x=object_type_desc, y=n_accidents)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("Accidents by object_type_desc")
+
+dfD %>%
+  ggplot(aes(x=object_type_desc, y=n_deaths)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("Fatalities by object_type_desc")
+
+dfD %>%
+  ggplot(aes(x=object_type_desc, y=fatality_rate)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("fatality to accident ratio by object_type_desc")
+
+```
+
+
+```{r}
+df_accidents %>%
+  mutate(tree=object_type_desc=='Tree (shrub/scrub)') %>%
+  left_join(df_nodes, by=('node_id'='node_id'))
+```
+
+
+
+```{r}
+ 
+
+df_accidents %>%
+  mutate(
+    tree=case_when(
+      object_type_desc=='Tree (shrub/scrub)' ~ '1 Tree',
+    TRUE ~ '2 No Tree')) %>%
+  left_join(df_nodes, by=('node_id'='node_id')) %>%
+  ggplot(aes(x=long,y=lat,col=tree)) +
+    geom_point(size=.05) +
+  ggtitle("Location of accidents involving trees")
+```
+
+
+
+```{r}
+df_nodes %>%
+  mutate(deadly_node = case_when(
+    fatal ~ '1 Yes',
+    TRUE ~ '2 No')
+  ) %>%
+  ggplot(aes(x=long,y=lat,col=deadly_node)) +
+    geom_point(size=.05) +
+  ggtitle("Sites of fatal accidents")
+```
+
+
+
+
+
+```{r}
+dfJ = df_accidents %>%
+  group_by(road_geometry_desc, accident_type_desc) %>%
+  summarise(
+    n_accidents=n(), 
+    n_deaths = sum(no_persons_killed),
+    n_casualties = sum(casualties)) %>%
+  mutate(
+    fatality_rate = n_deaths/n_accidents,
+    fatality_score=fatality_rate*n_deaths,
+    casualty_rate = n_casualties/n_accidents,
+    casualty_score = casualty_rate * n_casualties,
+    tool_tip = paste(
+      'n_accidents:',n_accidents,
+      '\nn_deaths:',n_deaths,
+      '\nfatality_rate',fatality_rate,
+      '\nfatality_score',fatality_score,
+      '\ncasualty_rate',casualty_rate,
+      '\ncasualty_score',casualty_score
+    )) %>%
+  arrange(-fatality_rate) 
+
+dfJ
+
+p = ggplot(dfJ, aes(road_geometry_desc, accident_type_desc, fill= fatality_score,text=tool_tip)) + 
+  geom_tile() +
+  scale_fill_gradient(low="white", high="red") +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("fatality_score by accident type and road geometry")
+
+p
+
+p = ggplot(dfJ, aes(road_geometry_desc, accident_type_desc, fill= casualty_score,text=tool_tip)) + 
+  geom_tile() +
+  scale_fill_gradient(low="white", high="red") +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  ggtitle("casualty_score by accident type and road geometry")
+
+p
+```
+
+
+
+
+
+
+```{r}
+df_nodes %>% 
+  mutate(multiple_accidents=n_accidents_at_node>1) %>%
+  group_by(multiple_accidents) %>%
+  summarise(n_nodes=n(),n_accidents=sum(n_accidents_at_node), n_casualties=sum(casualties_at_node), n_fatalities=sum(n_deaths_at_node))
+```
+
+
